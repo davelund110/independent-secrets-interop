@@ -69,7 +69,7 @@ taken earlier in the scenario. CLN's is `dev-sign-last-tx`, which needs
 
 ## Results on the current branches
 
-All nine pass with CLN at `4df42d5` and lnd at `9b0d0b3` (on blake2b-next).
+All nine pass with CLN at `6aa6ca8` and lnd at `9b0d0b3` (on blake2b).
 In every breach, the honest node takes the cheater's balance: CLN with the
 secret it stored, lnd with its breach arbiter. `lnd-long` has CLN store 399
 secrets and punish a breach of state 200 of 400.
