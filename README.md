@@ -12,7 +12,7 @@ for inspection.
 | Piece | Version | Set |
 |---|---|---|
 | Bitcoin Knots with BLAKE2b | any build that takes `-testactivationheight=blake2b@N` on regtest (we used v29.4.1.knots20260508) | `BITCOIN_BIN`: a directory with `bitcoind` and `bitcoin-cli` |
-| Lightning Fork | davelund110/lightning-fork, branch `independent-secrets-blip` (PR #7), built twice | `LND_INTEGRATION` and `LND_RELEASE`: directories with `lnd` and `lncli` |
+| Lightning Fork | paulscode/lightning-fork, branch `blake2b` (PR #7 is merged there), built twice | `LND_INTEGRATION` and `LND_RELEASE`: directories with `lnd` and `lncli` |
 | CLN fork | davelund110/lightning, branch `independent-secrets-blip` (PR #48), built in its tree | `CLN_SRC`: the source tree |
 | Python 3 | with pyln-client's dependencies (coincurve, base58, bitstring) | `PYDEPS`: a site directory holding them, if they aren't installed |
 
@@ -69,7 +69,7 @@ taken earlier in the scenario. CLN's is `dev-sign-last-tx`, which needs
 
 ## Results on the current branches
 
-All nine pass with CLN at `8aebea0` and lnd at `9b0d0b3` (on blake2b).
+All nine pass with CLN at `383eace` and lnd at `9b0d0b3`, which is what PR #7 merged into `blake2b`.
 In every breach, the honest node takes the cheater's balance: CLN with the
 secret it stored, lnd with its breach arbiter. `lnd-long` has CLN store 399
 secrets and punish a breach of state 200 of 400.
