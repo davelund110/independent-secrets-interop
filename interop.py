@@ -10,7 +10,7 @@ lnd sends KDF secrets, CLN keeps them:
   lnd-cheats       lnd broadcasts a revoked commitment (its channel.db restored
                    from a copy); CLN takes everything with the stored secret.
   lnd-cheats-htlc  The same with an HTLC in flight on the revoked commitment,
-                   and CLN restarted while its penalties are unconfirmed.
+                   and CLN restarted once it has proposed its penalties.
   lnd-long         About 100 rounds of payments with restarts of each side in
                    between, then lnd broadcasts a state from the middle.
   lnd-coop         A cooperative close, after which CLN keeps one secret.
@@ -43,6 +43,12 @@ set CLN_SRC, LND_INTEGRATION and LND_RELEASE (directories holding lnd and
 lncli), BITCOIN_BIN (holding bitcoind and bitcoin-cli), PYDEPS and
 INTEROP_RUN to run it elsewhere.
 
+Without privkeyio/lightning#49, CLN's direct penalty of an HTLC output pays
+less than the minimum relay fee here, so in lnd-cheats-htlc CLN takes the
+HTLC by penalising lnd's HTLC-timeout instead, which the script accepts and
+reports.  With a CLN that has #49, set INTEROP_STRICT_HTLC_PENALTY=1 to
+require the direct penalty.
+
 Usage: interop.py [scenario...]     (all by default)
 """
 import glob
@@ -55,6 +61,7 @@ import sys
 import time
 
 HOME = os.path.expanduser('~')
+STRICT_HTLC_PENALTY = os.environ.get('INTEROP_STRICT_HTLC_PENALTY') == '1'
 CLN_SRC = os.environ.get('CLN_SRC', HOME + '/privkeyio/lightning')
 LIGHTNINGD = CLN_SRC + '/lightningd/lightningd'
 LIGHTNING_CLI = CLN_SRC + '/cli/lightning-cli'
@@ -73,7 +80,7 @@ BASE = os.environ.get('INTEROP_RUN', HOME + '/interop/run')
 RPCPORT, P2PPORT = 28443, 28444
 ZMQBLOCK, ZMQTX = 28332, 28333
 CLN_PORT = 29735
-LND_PORT, LND_RPC, LND_REST = 29736, 20009, 28080
+LND_PORT, LND_RPC = 29736, 20009
 
 OPT_UNIFIED_SIGS = 514
 OPT_INDEPENDENT_SECRETS = int(os.environ.get("INDEPENDENT_SECRETS_BIT", "266"))
@@ -245,8 +252,7 @@ class Lnd:
                '--bitcoin.blake2b-activation-height=1', '--bitcoin.defaultchanconfs=1',
                '--noseedbackup', '--accept-keysend', '--debuglevel=debug',
                f'--listen=127.0.0.1:{LND_PORT}', f'--rpclisten=127.0.0.1:{LND_RPC}',
-               f'--restlisten=127.0.0.1:{LND_REST}', '--trickledelay=50',
-               '--norest', '--nobootstrap',
+               '--trickledelay=50', '--norest', '--nobootstrap',
                # Off by default in Lightning Fork.
                '--protocol.independent-secrets'] + self.extra
         if not self.release:
@@ -503,7 +509,7 @@ def cln_penalises(btc, cln, outputs, restart_midway=False):
         logs = cln.logs()
         if f'Resolved THEIR_REVOKED_UNILATERAL/{out} by our proposal OUR_PENALTY_TX' in logs:
             return 'penalty'
-        if (out == 'THEIR_HTLC'
+        if (out == 'THEIR_HTLC' and not STRICT_HTLC_PENALTY
                 and 'Resolved THEIR_REVOKED_UNILATERAL/THEIR_HTLC by THEIR_HTLC_TIMEOUT_TO_THEM' in logs
                 and 'Resolved THEIR_HTLC_TIMEOUT_TO_THEM/DELAYED_CHEAT_OUTPUT_TO_THEM by our proposal OUR_PENALTY_TX' in logs):
             return 'penalty of their HTLC-timeout'
@@ -515,6 +521,12 @@ def cln_penalises(btc, cln, outputs, restart_midway=False):
     wait_for(resolved, 'CLN takes every output', timeout=300, interval=1)
     for out in outputs:
         log(f'CLN took {out} by', taken(out))
+    if any(taken(out) != 'penalty' for out in outputs):
+        log('NOTE: CLN could only take the HTLC through the cheater\'s'
+            ' HTLC-timeout, as expected without privkeyio/lightning#49')
+    if STRICT_HTLC_PENALTY:
+        assert 'min relay fee not met' not in cln.logs(), \
+            'a penalty paid less than the minimum relay fee'
     assert_cln_calm(cln)
 
 
@@ -574,9 +586,19 @@ class Nodes:
         self.lnd = Lnd(f'{base}/lnd', lnd_extra, release=release)
 
     def __enter__(self):
-        self.btc.start()
-        self.cln.start()
-        self.lnd.start()
+        try:
+            self.btc.start()
+            self.cln.start()
+            self.lnd.start()
+            if '--dev-independent-secrets-sender' in self.cln.extra:
+                # Otherwise lnd, which keeps any secret, couldn't tell.
+                assert 'dev_independent_secrets_sender = 1' in self.cln.logs(), \
+                    "CLN's hsmd isn't sending independent secrets"
+        except BaseException:
+            # __exit__ isn't called when __enter__ fails: don't leave
+            # bitcoind and the nodes running on the fixed ports.
+            self.__exit__()
+            raise
         return self.btc, self.cln, self.lnd
 
     def __exit__(self, *exc):

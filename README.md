@@ -58,19 +58,21 @@ export BITCOIN_BIN=... LND_INTEGRATION=... LND_RELEASE=... CLN_SRC=... PYDEPS=..
 ./interop.py cln-cheats      # one
 ```
 
-It uses fixed local ports (28332, 28333, 28443, 28444, 29735, 29736, 20009,
-28080), so run one copy at a time.
+It uses fixed local ports (28332, 28333, 28443, 28444, 29735, 29736, 20009),
+so run one copy at a time.
 
 ## How the breaches are made
 
-These are test-only paths. lnd's breach is its database restored from a copy
-taken earlier in the scenario. CLN's is `dev-sign-last-tx`, which needs
-`--developer`. Neither works on a release build.
+lnd's breach is its database restored from a copy taken earlier in the
+scenario, the accident a penalty exists for. CLN's is `dev-sign-last-tx`, which
+needs CLN's `--developer` option.
 
 ## Results on the current branches
 
-All nine pass with CLN at `d4d1391`, rebased onto v26.06.9-blake2b.9, and lnd at
-`b13cb18`: `blake2b` with PR #7 and PR #13 merged (0.21.4-beta-blake2b.21).
+All nine pass with CLN at `d3e988f`, on v26.06.9-blake2b.9, and lnd at `b13cb18`:
+`blake2b` with PR #7 and PR #13 merged (0.21.4-beta-blake2b.21). Without
+privkeyio/lightning#49, `lnd-cheats-htlc` takes the HTLC through lnd's
+HTLC-timeout, and says so.
 In every breach, the honest node takes the cheater's balance: CLN with the
 secret it stored, lnd with its breach arbiter. `lnd-long` has CLN store 399
 secrets and punish a breach of state 200 of 400.
